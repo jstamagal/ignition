@@ -1,0 +1,80 @@
+{
+  "ignition": {
+    "version": "3.5.0"
+  },
+  "passwd": {
+    "users": [
+      {
+        "groups": [
+          "wheel",
+          "sudo"
+        ],
+        "name": "tj",
+        "passwordHash": "$6$p/IPTBCbNXayyYmK$f34NbNF3hNvnvpVXH/04faS//JQh2QpuE2lhfSHOeQXh3hxfPHHGDL7OItYa7iB0qS6M1w5jCJYbXAp5b.QEu0",
+        "sshAuthorizedKeys": [
+          "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC4agLso0Fv0OCfRju2QoZbhnZdJyEh6aIUIqTXNALED1NpjkcOdviQR8Qoyy7oI/jPZyzjDXKDhQJv+yXRGEtV+6jXZDM366emKFYdKf4FAYcq/92SDnH37EfwOP0BT/Unw1tWB7f4jSFnulEUX1fdnO3RBrJdlqwVZXLUtuA0mwvQsB2wnyWkFc6AIBMZ1d6IHUxFMC6qIDMeSFVhoD0OtpBpbspisdm4+EzT7En37tDFis4yi0kMHmkjlggR4XLV7Sk1LiNSiUd4Fi9/Y9a/W7nac4bEZgZnykBSX6POGEsF4CAW+kE4tnJ/qmfdZirdVZylG0MVrPen+GWdPF/6qXPSC1bwnDOHcmYJVgdTaOexX/4tYF9t4RGpKlIfkucN420HmQfQpgBvBpBHGxARkdCEXz0hFaS85Ubk+q+KbveqLBIZLIFiPOAkvzdgwcfFNoCcWL1mqxAbfu4KSNXdFgtivAQwubpn5oKQSGD12M/Fxp4rqjuuBi3DhvOrt1ibSxAUvEByX4tCaBMr/wAeY2ofKgB/kRy8HJgJQbQflFZLUPM8IzUoj+/OMMLFz48ldhlmCCPG4hpFlmGAwNlRwMoMJlh/HUbJA2PIyqWC7+LlsWyTpdiXfMdSIShVy4GuBoMGc+OXK+2F+HTFpv4rCZs0Wyx11UmUXrUvBQXX+Q== tj@fedora"
+        ]
+      }
+    ]
+  },
+  "storage": {
+    "directories": [
+      {
+        "path": "/etc/ucore-autorebase",
+        "mode": 492
+      }
+    ],
+    "disks": [
+      {
+        "device": "/dev/sda",
+        "wipeTable": true
+      }
+    ],
+    "files": [
+      {
+        "path": "/etc/kernel/cmdline.d/99-mitigations-off.conf",
+        "contents": {
+          "compression": "",
+          "source": "data:,mitigations%3Doff"
+        },
+        "mode": 420
+      },
+      {
+        "overwrite": true,
+        "path": "/etc/profile.d/zz-default-editor.sh",
+        "contents": {
+          "compression": "",
+          "source": "data:,export%20EDITOR%3Dnvim%0Aalias%20vi%3D'nvim'%0Aalias%20vim%3D'nvim'%0Aalias%20nano%3D'echo%20No.%20Just%20no.'%0A"
+        }
+      }
+    ]
+  },
+  "systemd": {
+    "units": [
+      {
+        "contents": "[Unit]\nDescription=Layer neomim with rpm-ostree\nWants=network-online.target\nAfter=network-online.target\n# We run before `zincati.service` to avoid conflicting rpm-ostree\n# transactions.\nBefore=zincati.service\nConditionPathExists=!/var/lib/%N.stamp\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\n# `--allow-inactive` ensures that rpm-ostree does not return an error\n# if the package is already installed. This is useful if the package is\n# added to the root image in a future Fedora CoreOS release as it will\n# prevent the service from failing.\nExecStart=/usr/bin/rpm-ostree install -y --allow-inactive neovim\nExecStart=/bin/touch /var/lib/%N.stamp\nExecStart=/bin/systemctl --no-block reboot\n\n[Install]\nWantedBy=multi-user.target\n",
+        "enabled": true,
+        "name": "rpm-ostree-install-neovim.service"
+      },
+      {
+        "contents": "[Unit]\nDescription=Install T420 optimization packages (TLP, zram, etc)\nAfter=rpm-ostree-install-wifi.service\nBefore=network-pre.target\nConditionPathExists=!/var/lib/%N.stamp\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/bin/rpm-ostree install -y --allow-inactive tlp tlp-rdw powertop zram-generator-defaults\nExecStart=/bin/touch /var/lib/%N.stamp\nExecStart=/bin/systemctl --no-block reboot\n\n[Install]\nWantedBy=multi-user.target\n",
+        "enabled": true,
+        "name": "rpm-ostree-install-t420-packages.service"
+      },
+      {
+        "enabled": true,
+        "name": "tlp.service"
+      },
+      {
+        "contents": "[Unit]\nDescription=uCore autorebase to unsigned OCI and reboot\nConditionPathExists=!/etc/ucore-autorebase/unverified\nConditionPathExists=!/etc/ucore-autorebase/signed\nAfter=network-online.target\nWants=network-online.target\n[Service]\nType=oneshot\nStandardOutput=journal+console\nExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-unverified-registry:ghcr.io/jstamagal/ucore:testing\nExecStart=/usr/bin/touch /etc/ucore-autorebase/unverified\nExecStart=/usr/bin/systemctl disable ucore-unsigned-autorebase.service\nExecStart=/usr/bin/systemctl reboot\n[Install]\nWantedBy=multi-user.target\n",
+        "enabled": true,
+        "name": "ucore-unsigned-autorebase.service"
+      },
+      {
+        "contents": "[Unit]\nDescription=uCore autorebase to signed OCI and reboot\nConditionPathExists=/etc/ucore-autorebase/unverified\nConditionPathExists=!/etc/ucore-autorebase/signed\nAfter=network-online.target\nWants=network-online.target\n[Service]\nType=oneshot\nStandardOutput=journal+console\nExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-image-signed:docker://ghcr.io/jstamagal/ucore:testing\nExecStart=/usr/bin/touch /etc/ucore-autorebase/signed\nExecStart=/usr/bin/systemctl disable ucore-signed-autorebase.service\nExecStart=/usr/bin/systemctl reboot\n[Install]\nWantedBy=multi-user.target\n",
+        "enabled": true,
+        "name": "ucore-signed-autorebase.service"
+      }
+    ]
+  }
+}
